@@ -8,13 +8,21 @@ module.exports = function(app, passport) {
     res.render('login.ejs', { message: req.flash('loginMessage') });
   });
 
-  // app.post('/login', function(req, res) {});
+  app.post('/login', passport.authenticate('local-login', {
+    successRedirect: '/profile',
+    failureRedirect: '/login',
+    failureFlash: true
+  }));
 
   app.get('/signup', function(req, res) {
     res.render('signup.ejs', { message: req.flash('signupMessage') });
   });
 
-  // app.post('/signup', function(req, res) {});
+  app.post('/signup', passport.authenticate('local-signup', {
+    successRedirect: '/profile',
+    failureRedirect: '/signup',
+    failureFlash: true
+  }));
 
   app.get('/profile', isLoggedIn, function(req, res) {
     res.render('profile.ejs', { user: req.user });
