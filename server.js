@@ -1,8 +1,7 @@
 require('dotenv').config();
 var express =      require('express');
 var app =          express();
-var port =         process.env.PORT || 8080;
-var mongoose =     require('mongoose');
+var port =         process.env.PORT || 9090;
 var passport =     require('passport');
 var flash =        require('connect-flash');
 
@@ -10,10 +9,6 @@ var morgan =       require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser =   require('body-parser');
 var session =      require('express-session');
-
-var dbConfig =     require('./config/database');
-
-mongoose.connect(dbConfig.url);
 
 require('./config/passport')(passport);
 

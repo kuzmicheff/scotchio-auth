@@ -1,8 +1,17 @@
 var LocalStrategy =    require('passport-local').Strategy;
 var FacebookStrategy = require('passport-facebook').Strategy;
-var User =             require('../app/models/user');
+var PaypalStrategy =   require('passport-paypal').Strategy;
 
-var authConfig = require('./auth');
+var dbConfig =         require('./database');
+var authConfig =       require('./auth');
+
+var Sequelize =        require('sequelize');
+var pg =               require('pg').native;
+var pghstore =         require('pg-hstore');
+var sequelize =        new Sequelize(dbConfig.url);
+
+var User =             sequelize.import('../app/models/user');
+User.sync();
 
 module.exports = function(passport) {
   
@@ -11,9 +20,12 @@ module.exports = function(passport) {
   });
 
   passport.deserializeUser(function(id, done) {
-    User.findById(id, function(err, user) {
-      done(err, user);
-    });
+    User.findById(id)
+      .then(function(user) {
+        done(null, user);
+      }).catch(function(e) {
+        done(e, false);
+      });
   });
 
   passport.use('local-signup', new LocalStrategy({
@@ -22,28 +34,37 @@ module.exports = function(passport) {
     passReqToCallback: true
   },
   function(req, email, password, done) {
-    process.nextTick(function() {
-      User.findOne({ 'local.email': email }, function(err, user) {
-        if (err) {
-          return done(err);
+    User.findOne({ where: { localemail: email } })
+      .then(function(existingUser) {
+        if (existingUser) {
+          return done(null, false, req.flash('signupMessage', 'That email is already taken.'));
         }
-        if (user) {
-          return done(null, false, req.flash('signupMessage', 'This email is already taken.'));
+        if(req.user) {
+          var user           = req.user;
+          user.localemail    = email;
+          user.localpassword = User.generateHash(password);
+          user.save().catch(function (err) {
+            throw err;
+          }).then(function() {
+            done(null, user);
+          });
         } 
         else {
-          var newUser =            new User();
-          newUser.local.email =    email;
-          newUser.local.password = newUser.generateHash(password);
-
-          newUser.save(function(err) {
-            if (err) {
-              throw err;
-            }
-            return done(null, newUser);
-          });
+          var newUser = User.build({
+            localemail:    email,
+            localpassword: User.generateHash(password)
+          }); 
+          newUser.save()
+            .then(function() {
+              done (null, newUser);
+            }).catch(function(err) {
+              done(null, false, req.flash('signupMessage', err));
+            });
         }
+      })
+      .catch(function (e) {
+        done(null, false, req.flash('signupMessage',e.name + " " + e.message));        
       });
-    });
   }));
 
   passport.use('local-login', new LocalStrategy({
@@ -52,18 +73,20 @@ module.exports = function(passport) {
     passReqToCallback: true
   },
   function(req, email, password, done) {
-    User.findOne({ 'local.email': email }, function(err, user) {
-      if (err) {
-        return done(err);
-      }
-      if (!user) {
-        return done(null, false, req.flash('loginMessage', 'User not found.'));
-      }
-      if (!user.validPassword(password)) {
-        return done(null, false, req.flash('loginMessage', 'Oops! Wrong password.'));
-      }
-      return done(null, user);
-    });
+    User.findOne({ where: { localemail: email } })
+        .then(function(user) {
+          if (!user) {
+            done(null, false, req.flash('loginMessage', 'Unknown user'));
+          } 
+          else if (!user.validatePassword(password)) {
+            done(null, false, req.flash('loginMessage', 'Wrong password'));
+          } 
+          else {
+            done(null, user);
+          }
+        }).catch(function(e) { 
+          done(null, false, req.flash('loginMessage',e.name + " " + e.message));
+        });
   }));
 
   var fbAuthConfig = authConfig.facebookAuth;
@@ -71,59 +94,47 @@ module.exports = function(passport) {
 
   passport.use(new FacebookStrategy(fbAuthConfig,
     function(req, token, refreshToken, profile, done) {
-      // asynchronous
-      process.nextTick(function() {
-        // check if the user is already logged in
-        if (!req.user) {
-          User.findOne({ 'facebook.id' : profile.id }, function(err, user) {
-            if (err) {
-              return done(err);
-            }
+      if (!req.user) {
+        User.findOne({ where : { 'facebookid' : profile.id }})
+          .then(function(user) {
             if (user) {
-              // if there is a user id already but no token (user was linked at one point and then removed)
-              if (!user.facebook.token) {
-                user.facebook.token = token;
-                user.facebook.name  = profile.name.givenName + ' ' + profile.name.familyName;
-                user.facebook.email = (profile.emails[0].value || '').toLowerCase();
-                user.save(function(err) {
-                  if (err) {
-                    return done(err);
-                  }
-                  return done(null, user);
-                });
+              if (!user.facebooktoken) {
+                user.facebooktoken = token;
+                user.facebookname  = profile.name.givenName + ' ' + profile.name.familyName;
+                user.facebookemail = profile.emails[0].value;
+                user.save()
+                  .then(function() {
+                    done(null, user);
+                  }).catch(function(e) {});
               }
-              return done(null, user); // user found, return that user
-            } 
+              else {
+                done(null, user);
+              }
+            }
             else {
-              // if there is no user, create new user
-              var newUser            = new User();
-              newUser.facebook.id    = profile.id;
-              newUser.facebook.token = token;
-              newUser.facebook.name  = profile.name.givenName + ' ' + profile.name.familyName;
-              newUser.facebook.email = (profile.emails[0].value || '').toLowerCase();
-              newUser.save(function(err) {
-                if (err) {
-                  return done(err);
-                }
-                return done(null, newUser);
-              });
+              var newUser = User.build({
+                facebookid: profile.id,
+                facebooktoken: token,
+                facebookname: profile.name.givenName + ' ' + profile.name.familyName,
+                facebookemail: profile.emails[0].value
+              }); 
+              newUser.save()
+                .then(function() {
+                  done(null, user);
+                }).catch(function(e) {});
             }
-          });
-        } 
-        else {
-          // user already exists and is logged in, we have to link accounts
-          var user            = req.user; // pull the user out of the session
-          user.facebook.id    = profile.id;
-          user.facebook.token = token;
-          user.facebook.name  = profile.name.givenName + ' ' + profile.name.familyName;
-          user.facebook.email = (profile.emails[0].value || '').toLowerCase();
-          user.save(function(err) {
-            if (err) {
-              return done(err);
-            }
-            return done(null, user);
           });
         }
-      });
+        else {
+          var user           = req.user;
+          user.facebookid    = profile.id;
+          user.facebooktoken = token;
+          user.facebookname  = profile.name.givenName + ' ' + profile.name.familyName;
+          user.facebookemail = profile.emails[0].value;
+          user.save()
+            .then(function() {
+              done(null, user);
+            }).catch(function(e) {});
+        }
   }));
 };
