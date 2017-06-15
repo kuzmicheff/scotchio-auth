@@ -1,6 +1,6 @@
 var LocalStrategy =    require('passport-local').Strategy;
 var FacebookStrategy = require('passport-facebook').Strategy;
-var PaypalStrategy =   require('passport-paypal').Strategy;
+var PaypalStrategy =   require('passport-paypal-oauth').Strategy;
 
 var dbConfig =         require('./database');
 var authConfig =       require('./auth');
@@ -131,6 +131,55 @@ module.exports = function(passport) {
           user.facebooktoken = token;
           user.facebookname  = profile.name.givenName + ' ' + profile.name.familyName;
           user.facebookemail = profile.emails[0].value;
+          user.save()
+            .then(function() {
+              done(null, user);
+            }).catch(function(e) {});
+        }
+  }));
+
+  var ppAuthConfig = authConfig.paypalAuth;
+  ppAuthConfig.passReqToCallback = true;
+
+  passport.use(new PaypalStrategy(ppAuthConfig,
+    function(req, token, refreshToken, profile, done) {
+      if (!req.user) {
+        User.findOne({ where : { 'paypalid' : profile.id }})
+          .then(function(user) {
+            if (user) {
+              if (!user.paypaltoken) {
+                user.paypaltoken = token;
+                user.paypalname  = profile.name.givenName + ' ' + profile.name.familyName;
+                user.paypalemail = profile.emails[0].value;
+                user.save()
+                  .then(function() {
+                    done(null, user);
+                  }).catch(function(e) {});
+              }
+              else {
+                done(null, user);
+              }
+            }
+            else {
+              var newUser = User.build({
+                paypalid: profile.id,
+                paypaltoken: token,
+                paypalname: profile.name.givenName + ' ' + profile.name.familyName
+                // paypalemail: profile.emails[0].value
+              }); 
+              newUser.save()
+                .then(function() {
+                  done(null, user);
+                }).catch(function(e) {});
+            }
+          });
+        }
+        else {
+          var user           = req.user;
+          user.paypalid    = profile.id;
+          user.paypaltoken = token;
+          user.paypalname  = profile.name.givenName + ' ' + profile.name.familyName;
+          user.paypalemail = profile.emails[0].value;
           user.save()
             .then(function() {
               done(null, user);

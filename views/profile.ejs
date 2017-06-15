@@ -20,9 +20,9 @@
     <div class="row">
 
         <!-- LOCAL INFORMATION -->
-        <div class="col-sm-6">
+        <div class="col-sm-4">
             <div class="well">
-                <h3><span class="fa fa-user"></span> Local</h3>
+                <h3 class="text-primary"><span class="fa fa-user"></span> Local</h3>
 
                     <p>
                         <strong>id</strong>: <%= user.id %><br>
@@ -33,7 +33,7 @@
             </div>
         </div>
 
-        <div class="col-sm-6">
+        <div class="col-sm-4">
             <div class="well">
                 <h3 class="text-primary"><span class="fa fa-facebook"></span> Facebook</h3>
 
@@ -42,6 +42,20 @@
                         <strong>token</strong>: <%= user.facebooktoken %><br>
                         <strong>email</strong>: <%= user.facebookemail %><br>
                         <strong>name</strong>: <%= user.facebookname %>
+                    </p>
+
+            </div>
+        </div>
+
+        <div class="col-sm-4">
+            <div class="well">
+                <h3 class="text-primary"><span class="fa fa-user"></span> PayPal</h3>
+
+                    <p>
+                        <strong>id</strong>: <%= user.paypalid %><br>
+                        <strong>token</strong>: <%= user.paypaltoken %><br>
+                        <strong>email</strong>: <%= user.paypalemail %><br>
+                        <strong>name</strong>: <%= user.paypalname %>
                     </p>
 
             </div>

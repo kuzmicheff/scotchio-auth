@@ -37,6 +37,15 @@ module.exports = function(app, passport) {
     failureRedirect: '/'
   }));
 
+  app.get('/auth/paypal', passport.authenticate('paypal'));
+
+  app.get('/auth/paypal/return', passport.authenticate('paypal', {
+    successRedirect: '/profile',
+    failureRedirect: '/'
+  }), function(req, res) {
+    res.redirect('/');
+  });
+
   app.get('/logout', function(req, res) {
     req.logout();
     res.redirect('/');
